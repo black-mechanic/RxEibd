@@ -10,7 +10,6 @@
 #include "RxEibd.h"
 #include <stdio.h>
 #include <string.h>
-#include "ledcontrol.h"
 
 typedef unsigned char uchar;
 #define LLGA	32	// Length of List of Group Address

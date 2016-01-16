@@ -5,8 +5,8 @@ CXXFLAGS += -I/usr/arm-linux-gnueabihf/include -I/usr/arm-linux-gnueabihf/lib
 LDFLAGS += -L. -L/usr/arm-linux-gnueabihf/lib -L/usr/arm-linux-gnueabihf/include
 
 all: RxEibd
-RxEibd: RxEibd.o common.o ledcontrol.o
-	$(CXX) $(LDFLAGS) -o RxEibd RxEibd.o common.o ledcontrol.o -leibclient
+RxEibd: RxEibd.o common.o
+	$(CXX) $(LDFLAGS) -o RxEibd RxEibd.o common.o -leibclient
 
 RxEibd.o: RxEibd.cpp common.h
 	$(CXX) $(CXXFLAGS) -c RxEibd.cpp 
@@ -14,9 +14,6 @@ RxEibd.o: RxEibd.cpp common.h
 common.o: common.c common.h eibclient.h
 	$(CXX) $(CXXFLAGS) -c common.c
 	
-ledcontrol.o: ledcontrol.cpp ledcontrol.h
-	$(CXX) $(CXXFLAGS) -c ledcontrol.cpp
-
 clean:
 	rm -rf *.o
 
