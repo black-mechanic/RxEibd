@@ -18,7 +18,7 @@ struct listGroupAddr{
 	int group_addr_in_hex;			//  group address in hex 039A
 };
 
-int mpdControl(char *cmd_string, char *send_to_ip, int send_to_port); //Send command to mpd
+int mpdControl(char *cmd_string, char *send_to_ip, int send_to_port, int verbose_switcher); //Send command to mpd
 void convert_str_to_myListGA(char* parsed_cfg_str, listGroupAddr *myListGA, int index_gaddr);
 
 
