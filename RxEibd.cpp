@@ -12,7 +12,9 @@
 #include <string.h>
 
 typedef unsigned char uchar;
-#define LLGA	32	// Length of List of Group Address
+#define LENGTH_OF_LIST_OF_GADDR	32	// Length of List of Group Address
+#define LENGTH_OF_CMD_STR	200
+#define CMD_STRING_DELIMITER	"~"
 
 int main (int argc, char *argv[])
 {
@@ -23,12 +25,13 @@ int main (int argc, char *argv[])
   uchar eibbuf[200];
   int tmpeibval;
 
-  FILE *ListGroupAddr = NULL;
-  listGroupAddr myListGA[LLGA];
+  FILE *fh_cfg_file = NULL; // Файл с соответствиями KNX телеграммы <-> IPкоманды
+  listGroupAddr myListGA[LENGTH_OF_LIST_OF_GADDR];
   eibaddr_t testga;
-  int iga = 0;  // index for group address array
+  int index_gaddr;  // index for group address array
+  char *parsed_cfg_str; // Будет равна LENGTH_OF_CMD_STR
   char mcom[] = "next\n";
-  int figa;	// real length of list of group address - counting due to read
+  int size_of_list_gaddr;	// real length of list of group address - counting due to read
 
   if (argc != 3)
     die ("usage: %s Url(ip:localhost:6720) file(with list of cmd)", argv[0]);
@@ -39,19 +42,24 @@ int main (int argc, char *argv[])
   if (EIBOpen_GroupSocket (eibcon, 0) == -1)
     die ("Connect failed");
 //Fill array from file
-  if((ListGroupAddr = fopen(argv[2], "r")) == NULL)
+  if((fh_cfg_file = fopen(argv[2], "r")) == NULL)
 	  die ("Error Open file with list of group address");
-  //while(fscanf (ListGroupAddr, "%s%d%s%d%*c%[^\n]", myListGA[iga].groupAddr, &myListGA[iga].value, myListGA[iga].mpdip, &myListGA[iga].mpdport, myListGA[iga].mpdcmd) != EOF){
-  while(fscanf (ListGroupAddr, "%s%d%s%d%s", myListGA[iga].groupAddr, &myListGA[iga].value, myListGA[iga].mpdip, &myListGA[iga].mpdport, myListGA[iga].mpdcmd) != EOF){
-	  myListGA[iga].hGA = readgaddr((myListGA[iga].groupAddr));
-	  iga++;
-	  if(iga == LLGA)
+// Читаем командные строки из конфигурационного файла и заполняем массив структур myListGA
+  index_gaddr = 0;
+  parsed_cfg_str = (char*)malloc(LENGTH_OF_CMD_STR * sizeof(char));
+  while(fgets(parsed_cfg_str, LENGTH_OF_CMD_STR, fh_cfg_file) != NULL){
+	  // Здесь парсим строку
+	  convert_str_to_myListGA(parsed_cfg_str, myListGA, index_gaddr);
+	  index_gaddr++;
+	  if(index_gaddr == LENGTH_OF_LIST_OF_GADDR)
 		  break;
   }
-  figa=iga;	// real number of monitoring group address
-  for(iga=0; iga != figa; iga++)
-	  printf("Result N:%d -> %s - %d - %s - %d - %s - %X\n", iga, myListGA[iga].groupAddr, myListGA[iga].value, myListGA[iga].mpdip, myListGA[iga].mpdport, myListGA[iga].mpdcmd, myListGA[iga].hGA);
-  fclose(ListGroupAddr);
+  free(parsed_cfg_str);
+
+  size_of_list_gaddr=index_gaddr;	// real number of monitoring group address
+  for(index_gaddr=0; index_gaddr != size_of_list_gaddr; index_gaddr++)
+	  printf("Result N:%d -> %s - %d - %s - %d - %s - %X\n", index_gaddr, myListGA[index_gaddr].group_addr, myListGA[index_gaddr].value, myListGA[index_gaddr].send_to_ip, myListGA[index_gaddr].send_to_port, myListGA[index_gaddr].cmd_string, myListGA[index_gaddr].group_addr_in_hex);
+  fclose(fh_cfg_file);
 
   while (1){
 	  len = EIBGetGroup_Src (eibcon, sizeof (eibbuf), eibbuf, &eibsrc, &eibdest);
@@ -94,10 +102,10 @@ int main (int argc, char *argv[])
     	  }
     	  printf(" Destination in HEX is ->  %X ", eibdest);
     	  tmpeibval = eibbuf[1] & 0x3F;
-    	  for(iga=0; iga != figa; iga++){
-    		  if((myListGA[iga].hGA == eibdest) && (myListGA[iga].value == tmpeibval)){
-    			  printf("\n Caught command => %s \n", myListGA[iga].mpdcmd);
-    			  mpdControl(myListGA[iga].mpdcmd, myListGA[iga].mpdip, myListGA[iga].mpdport);
+    	  for(index_gaddr=0; index_gaddr != size_of_list_gaddr; index_gaddr++){
+    		  if((myListGA[index_gaddr].group_addr_in_hex == eibdest) && (myListGA[index_gaddr].value == tmpeibval)){
+    			  printf("\n Caught command => %s \n", myListGA[index_gaddr].cmd_string);
+    			  mpdControl(myListGA[index_gaddr].cmd_string, myListGA[index_gaddr].send_to_ip, myListGA[index_gaddr].send_to_port);
     		  }
     	  }
     	  fflush (stdout);
@@ -107,20 +115,20 @@ int main (int argc, char *argv[])
   return 0;
 }
 
-int mpdControl(char *mpdcmd, char *mpdip, int mpdport)
+int mpdControl(char *cmd_string, char *send_to_ip, int send_to_port)
 {
 	const char *lfeed = "\n";
 	char tmpcmd[128]="";
 	char namecmd[64]="";
 	char * fptr; char * nptr; //Pointer to certain position in string (first? next)
-	if(mpdcmd[0]=='#'){ 	  // Special command start with symbol #
-		switch(mpdcmd[1]){
+	if(cmd_string[0]=='#'){ 	  // Special command start with symbol #
+		switch(cmd_string[1]){
 		case 'v':
 			printf("case v\n");
 			strcat(tmpcmd, "volume");
 			tmpcmd[6]=' ';
-			tmpcmd[7]=mpdcmd[2]; // + or -
-			tmpcmd[8]=mpdcmd[3]; // real value of step of volume, for example 5
+			tmpcmd[7]=cmd_string[2]; // + or -
+			tmpcmd[8]=cmd_string[3]; // real value of step of volume, for example 5
 			tmpcmd[9]='\0';		 // End of string
 			break;				 // Ready volume +5 or volume -5
 		case 'p':
@@ -128,7 +136,7 @@ int mpdControl(char *mpdcmd, char *mpdip, int mpdport)
 			strcat(tmpcmd, "clear");	//clear
 			strcat(tmpcmd, lfeed);		//clear<LF>
 			strcat(tmpcmd, "load ");	//clear<LF>load <-- with space
-			fptr = strchr(mpdcmd, '"');
+			fptr = strchr(cmd_string, '"');
 			nptr = strchr(fptr+1, '"');
 			strncpy(namecmd, fptr, nptr-fptr+1); // extract name like "Radio"
 			namecmd[(nptr-fptr+1)]='\0';
@@ -143,11 +151,14 @@ int mpdControl(char *mpdcmd, char *mpdip, int mpdport)
 		}
 	}else{
 		printf("case else\n");
-		strcpy(tmpcmd, mpdcmd);	 // if command does not include special symbol #
+		strcpy(tmpcmd, cmd_string);	 // if command does not include special symbol #
 	}
-	strcat(tmpcmd, lfeed);
+	//strcat(tmpcmd, lfeed);
 //	"play\n" "next\n" "currentsong\n" "previous\n"
-	char buf[1024];
+	struct timeval timeout;
+	timeout.tv_sec = 3;
+	timeout.tv_usec = 0;
+    char buf[1024];
 	int sock;
     struct sockaddr_in addr;
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -155,23 +166,46 @@ int mpdControl(char *mpdcmd, char *mpdip, int mpdport)
     if(sock < 0)
     {
         perror("socket");
-        exit(1);
-    }
+        return -1;
+     }
+    if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+    	printf("setsockopt failed\n");
+    if (setsockopt (sock, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+    	printf("setsockopt failed\n");
 
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(mpdport); // или любой другой порт...
+    addr.sin_port = htons(send_to_port); // или любой другой порт...
     //addr.sin_addr.s_addr = htonl(0xc0a87b26); //26 or 32
-    inet_pton(AF_INET, mpdip, &(addr.sin_addr));
+    inet_pton(AF_INET, send_to_ip, &(addr.sin_addr));
 
     if(connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
     {
         perror("connect");
-        exit(2);
+        return -2;
+        //exit(2);
     }
-    printf("\n Prepare to send to IP -> %s | to Port -> %d | command -> %s \n", mpdip, mpdport, tmpcmd);
+    printf("\n Prepare to send to IP -> %s | to Port -> %d | command -> %s \n", send_to_ip, send_to_port, tmpcmd);
     recv(sock, buf, 1023, 0);
     send(sock, tmpcmd, (strlen(tmpcmd)), 0);
     recv(sock, buf, 1023, 0);
     close(sock);
     return 0;
+}
+
+void convert_str_to_myListGA(char* parsed_cfg_str, listGroupAddr *myListGA, int index_gaddr)
+{
+	const char s[3] = CMD_STRING_DELIMITER; // Разделитель параметров в строке
+	char *token; // Выделяемая подстрока
+
+	token = strtok(parsed_cfg_str, s); // Первый токен - строка
+	strcpy(myListGA[index_gaddr].group_addr, token);
+	token = strtok(NULL, s);
+	myListGA[index_gaddr].value = atoi(token);
+	token = strtok(NULL, s);
+	strcpy(myListGA[index_gaddr].send_to_ip, token);
+	token = strtok(NULL, s);
+	myListGA[index_gaddr].send_to_port = atoi(token);
+	token = strtok(NULL, s);
+	strcpy(myListGA[index_gaddr].cmd_string, token);
+	myListGA[index_gaddr].group_addr_in_hex = readgaddr((myListGA[index_gaddr].group_addr));
 }

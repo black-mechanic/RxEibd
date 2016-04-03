@@ -10,15 +10,16 @@
 //#include "ledcontrol.h"
 
 struct listGroupAddr{
-	char groupAddr[10]; //  1/1/1
+	char group_addr[10]; //  1/1/1
 	int value;			//	1
-	char mpdip[16];		//192.168.123.39
-	int  mpdport;		//6600
-	char mpdcmd[128];	//	play
-	int hGA;			//  group address in hex 039A
+	char send_to_ip[16];		//192.168.123.39
+	int  send_to_port;		//6600
+	char cmd_string[128];	//	play
+	int group_addr_in_hex;			//  group address in hex 039A
 };
 
-int mpdControl(char *mpdcmd, char *mpdip, int mpdport); //Send command to mpd
+int mpdControl(char *cmd_string, char *send_to_ip, int send_to_port); //Send command to mpd
+void convert_str_to_myListGA(char* parsed_cfg_str, listGroupAddr *myListGA, int index_gaddr);
 
 
 
